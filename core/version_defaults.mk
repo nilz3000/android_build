@@ -59,6 +59,47 @@ PLATFORM_VERSION_CODENAME.TP1A := REL
 # be empty to use PLATFORM_VERSION as the user-visible version.  For
 # a preview release it can be set to a user-friendly value like `12 Preview 1`
 PLATFORM_DISPLAY_VERSION := 13
+ifndef PLATFORM_VERSION_CODENAME
+  PLATFORM_VERSION_CODENAME := $(PLATFORM_VERSION_CODENAME.$(TARGET_PLATFORM_VERSION))
+  ifndef PLATFORM_VERSION_CODENAME
+    # PLATFORM_VERSION_CODENAME falls back to TARGET_PLATFORM_VERSION
+    PLATFORM_VERSION_CODENAME := $(TARGET_PLATFORM_VERSION)
+  endif
+
+  # This is all of the *active* development codenames.
+  # This confusing name is needed because
+  # all_codenames has been baked into build.prop for ages.
+  #
+  # Should be either the same as PLATFORM_VERSION_CODENAME or a comma-separated
+  # list of additional codenames after PLATFORM_VERSION_CODENAME.
+  PLATFORM_VERSION_ALL_CODENAMES :=
+
+  # Build a list of all active code names. Avoid duplicates, and stop when we
+  # reach a codename that matches PLATFORM_VERSION_CODENAME (anything beyond
+  # that is not included in our build).
+  _versions_in_target := \
+    $(call find_and_earlier,$(ALL_VERSIONS),$(TARGET_PLATFORM_VERSION))
+  $(foreach version,$(_versions_in_target),\
+    $(eval _codename := $(PLATFORM_VERSION_CODENAME.$(version)))\
+    $(if $(filter $(_codename),$(PLATFORM_VERSION_ALL_CODENAMES)),,\
+      $(eval PLATFORM_VERSION_ALL_CODENAMES += $(_codename))))
+
+  # And convert from space separated to comma separated.
+  PLATFORM_VERSION_ALL_CODENAMES := \
+    $(subst $(space),$(comma),$(strip $(PLATFORM_VERSION_ALL_CODENAMES)))
+
+endif
+.KATI_READONLY := \
+  PLATFORM_VERSION_CODENAME \
+  PLATFORM_VERSION_ALL_CODENAMES
+
+ifndef PLATFORM_VERSION
+  ifeq (REL,$(PLATFORM_VERSION_CODENAME))
+      PLATFORM_VERSION := $(PLATFORM_VERSION_LAST_STABLE)
+  else
+      PLATFORM_VERSION := $(PLATFORM_VERSION_CODENAME)
+  endif
+endif
 
 ifndef PLATFORM_SDK_VERSION
   # This is the canonical definition of the SDK version, which defines
@@ -104,6 +145,37 @@ ifndef PLATFORM_SECURITY_PATCH
     #  It must match one of the Android Security Patch Level strings of the Public Security Bulletins.
     #  If there is no $PLATFORM_SECURITY_PATCH set, keep it empty.
     PLATFORM_SECURITY_PATCH := 2022-08-05
+endif
+
+ifndef PLATFORM_SECURITY_PATCH_TIMESTAMP
+  # Used to indicate the matching timestamp for the security patch string in PLATFORM_SECURITY_PATCH.
+  PLATFORM_SECURITY_PATCH_TIMESTAMP := $(shell date -d 'TZ="GMT" $(PLATFORM_SECURITY_PATCH)' +%s)
+endif
+.KATI_READONLY := PLATFORM_SECURITY_PATCH_TIMESTAMP
+
+ifndef PLATFORM_BASE_OS
+  # Used to indicate the base os applied to the device.
+  # Can be an arbitrary string, but must be a single word.
+  #
+  # If there is no $PLATFORM_BASE_OS set, keep it empty.
+  PLATFORM_BASE_OS :=
+endif
+.KATI_READONLY := PLATFORM_BASE_OS
+
+ifndef BUILD_ID
+  # Used to signify special builds.  E.g., branches and/or releases,
+  # like "M5-RC7".  Can be an arbitrary string, but must be a single
+  # word and a valid file name.
+  #
+  # If there is no BUILD_ID set, make it obvious.
+  BUILD_ID := UNKNOWN
+endif
+.KATI_READONLY := BUILD_ID
+
+ifndef BUILD_DATETIME
+  # Used to reproduce builds by setting the same time. Must be the number
+  # of seconds since the Epoch.
+  BUILD_DATETIME := $(shell date +%s)
 endif
 
 include $(BUILD_SYSTEM)/version_util.mk
